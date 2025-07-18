@@ -1,0 +1,7 @@
+openai
+supabase
+psycopg2-binary
+requests
+python-dotenv
+slack_bolt
+slack_sdk 
