@@ -168,12 +168,21 @@ def handle_mention(event, say):
         logger.error(f"メンション処理失敗: {e}\n{traceback.format_exc()}")
         say(f"エラーが発生しました: {e}")
 
+# ヘルスチェックエンドポイント
+@flask_app.route("/", methods=["GET"])
+def health_check():
+    return jsonify({"status": "ok", "message": "Slack AI Bot is running"})
+
 # Slackイベントエンドポイント
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
+    logger.info(f"Slackイベント受信: {request.json}")
     if request.json and "challenge" in request.json:
-        return jsonify({"challenge": request.json["challenge"]})
+        challenge = request.json["challenge"]
+        logger.info(f"URL検証チャレンジ: {challenge}")
+        return jsonify({"challenge": challenge})
     return handler.handle(request)
 
 if __name__ == "__main__":
-    flask_app.run(port=3000)
+    port = int(os.environ.get("PORT", 3000))
+    flask_app.run(host="0.0.0.0", port=port)
