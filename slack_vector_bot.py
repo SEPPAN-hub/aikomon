@@ -1,5 +1,6 @@
 import os
 import json
+import numpy as np
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from openai import OpenAI
@@ -57,34 +58,60 @@ def get_embedding(text):
         return None
 
 # Supabaseベクトル類似検索
-# pgvector拡張が有効な前提
-# embedding <=> :query_embedding で類似度計算
-# 上位3件を返す
-
 def search_similar_messages(query_embedding, top_k=3):
     try:
-        # SQL RPCで直接問い合わせ
-        sql = f"""
-        SELECT message_text, user_id, timestamp, embedding, raw_json, (embedding <=> '[{','.join(map(str, query_embedding))}]') AS distance
-        FROM slack_messages
-        ORDER BY distance ASC
-        LIMIT {top_k};
-        """
-        res = supabase.rpc("execute_sql", {"sql": sql}).execute()
-        if hasattr(res, 'data') and res.data:
-            return res.data
-        else:
-            logger.warning("Supabase検索結果なし")
+        # 直接的なクエリでベクトル検索
+        res = supabase.table("slack_messages").select("message_text, user_id, timestamp, embedding, raw_json").execute()
+        
+        if not res.data:
+            logger.warning("データベースにメッセージがありません")
             return []
+        
+        # Pythonでコサイン類似度を計算
+        def cosine_similarity(a, b):
+            a = np.array(a, dtype=float)
+            b = np.array(b, dtype=float)
+            return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+        
+        # 各メッセージの類似度を計算
+        messages_with_similarity = []
+        for msg in res.data:
+            if msg.get('embedding'):
+                try:
+                    # embeddingが文字列の場合はJSONとしてパース
+                    if isinstance(msg['embedding'], str):
+                        embedding = json.loads(msg['embedding'])
+                    else:
+                        embedding = msg['embedding']
+                    
+                    # 数値配列に変換
+                    embedding = [float(x) for x in embedding]
+                    
+                    similarity = cosine_similarity(query_embedding, embedding)
+                    messages_with_similarity.append({
+                        **msg,
+                        'similarity': similarity
+                    })
+                except Exception as e:
+                    logger.error(f"embedding処理エラー: {e}")
+                    continue
+        
+        # 類似度でソート
+        messages_with_similarity.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        # 上位k件を返す
+        return messages_with_similarity[:top_k]
+        
     except Exception as e:
         logger.error(f"Supabaseベクトル検索失敗: {e}")
         return []
 
 # 要約・回答生成
-# 類似メッセージをまとめて、質問文と一緒にLLMへ投げる
-
 def generate_answer(user_query, similar_messages):
     try:
+        if not similar_messages:
+            return "類似する過去メッセージが見つかりませんでした。"
+        
         context = "\n".join([f"・{msg['message_text']}" for msg in similar_messages])
         prompt = f"""
 あなたはSlackの社内AIアシスタントです。
@@ -144,11 +171,9 @@ def handle_mention(event, say):
 # Slackイベントエンドポイント
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
-    data = request.get_json(force=True, silent=True)
-    if data and "challenge" in data:
-        return jsonify({"challenge": data["challenge"]})
+    if request.json and "challenge" in request.json:
+        return jsonify({"challenge": request.json["challenge"]})
     return handler.handle(request)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 3000))
-    flask_app.run(host="0.0.0.0", port=port) 
+    flask_app.run(port=3000)
