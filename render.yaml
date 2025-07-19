@@ -14,7 +14,7 @@ services:
         sync: false
       - key: SLACK_BOT_TOKEN
         sync: false
-      - key: SLACK_APP_TOKEN
+      - key: SLACK_SIGNING_SECRET
         sync: false
       - key: PORT
         value: 3000

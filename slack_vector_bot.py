@@ -23,10 +23,11 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 
 # 事前チェック
-if not SUPABASE_URL or not SUPABASE_KEY or not OPENAI_API_KEY or not SLACK_BOT_TOKEN:
-    raise ValueError("環境変数(SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY, SLACK_BOT_TOKEN)が不足しています")
+if not SUPABASE_URL or not SUPABASE_KEY or not OPENAI_API_KEY or not SLACK_BOT_TOKEN or not SLACK_SIGNING_SECRET:
+    raise ValueError("環境変数(SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET)が不足しています")
 
 # クライアント初期化
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -34,7 +35,7 @@ openai_client = OpenAI(api_key=OPENAI_API_KEY)
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
 # Slack Bolt/Flask
-app = App(token=SLACK_BOT_TOKEN)
+app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 flask_app = Flask(__name__)
 handler = SlackRequestHandler(app)
 
